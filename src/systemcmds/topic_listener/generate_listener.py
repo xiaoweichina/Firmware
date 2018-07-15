@@ -112,7 +112,6 @@ for m in set(messages):
 	print("#include <uORB/topics/%s.h>" % m)
 
 print("""
-extern "C" __EXPORT int listener_main(int argc, char *argv[]);
 
 static bool check_timeout(const hrt_abstime& time) {
     if (hrt_elapsed_time(&time) > 2*1000*1000) {
@@ -124,35 +123,42 @@ static bool check_timeout(const hrt_abstime& time) {
 """)
 
 for index, (m, t) in enumerate(zip(messages, topics)):
-	print("void listen_%s(unsigned num_msgs, unsigned topic_instance);" % t)
+	print("void listen_%s(unsigned num_msgs, unsigned topic_instance, unsigned topic_interval);" % t)
 
 print ("""
-\nint listener_main(int argc, char *argv[]) {
-	if(argc < 2) {
-		printf("need at least two arguments: topic name. [optional number of messages to print] [optional instance]\\n");
-		return 1;
-	}
+
+\nstatic void listener_generated(char * topic_name, int topic_instance, int topic_rate, int num_msgs) {
+
 """)
-print("\tunsigned num_msgs = (argc > 2) ? atoi(argv[2]) : 1;")
-print("\tunsigned topic_instance = (argc > 3) ? atoi(argv[3]) : 0;\n")
+
+print("""
+
+	unsigned topic_interval = 0;
+	if (topic_rate != 0) {
+		topic_interval = 1000 / topic_rate;
+	}
+
+""")
+
 for index, (m, t) in enumerate(zip(messages, topics)):
 	if index == 0:
-		print("\tif (strncmp(argv[1],\"%s\",50) == 0) {" % t)
+		print("\tif (strncmp(topic_name,\"%s\", %d) == 0) {" % (t, len(t)))
 	else:
-		print("\t} else if (strncmp(argv[1],\"%s\",50) == 0) {" % t)
-	print("\t\tlisten_%s(num_msgs, topic_instance);" % t)
+		print("\t} else if (strncmp(topic_name,\"%s\", %d) == 0) {" % (t, len(t)))
+	print("\t\tlisten_%s(num_msgs, topic_instance, topic_interval);" % t)
 
 print("\t} else {")
 print("\t\t printf(\" Topic did not match any known topics\\n\");")
 print("\t}")
-print("\t return 0;")
+
 print("}\n")
 
 for index, (m, t) in enumerate(zip(messages, topics)):
-	print("void listen_%s(unsigned num_msgs, unsigned topic_instance) {" % t)
+	print("void listen_%s(unsigned num_msgs, unsigned topic_instance, unsigned topic_interval) {" % t)
 	print("\torb_id_t ID = ORB_ID(%s);" % t)
 	print("\tif (orb_exists(ID, topic_instance) != 0) { printf(\"never published\\n\"); return; }")
 	print("\tint sub = orb_subscribe_multi(ORB_ID(%s), topic_instance);" % t)
+	print("\torb_set_interval(sub, topic_interval);")
 	print("\tbool updated = false;")
 	print("\tunsigned i = 0;")
 	print("\thrt_abstime start_time = hrt_absolute_time();")
